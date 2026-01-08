@@ -1,0 +1,59 @@
+name: CodeSergeantUI
+options:
+  bundleIdPrefix: com.codesergeant
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  xcodeVersion: "15.0"
+
+targets:
+  CodeSergeantUI:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: .
+        excludes:
+          - "**/*.md"
+          - "**/Package.swift"
+          - "**/project.yml"
+          - "**/README.md"
+    resources:
+      - Resources/Assets.xcassets
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.codesergeant.CodeSergeantUI
+      PRODUCT_NAME: CodeSergeantUI
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+      SWIFT_VERSION: "5.9"
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited)"
+      INFOPLIST_FILE: Info.plist
+      CODE_SIGN_ENTITLEMENTS: CodeSergeantUI.entitlements
+      ENABLE_HARDENED_RUNTIME: YES
+      ENABLE_APP_SANDBOX: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
+        CFBundleShortVersionString: "2.0.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        NSHumanReadableCopyright: "Copyright © 2026 Code Sergeant"
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: YES
+        LSUIElement: YES
+
+schemes:
+  CodeSergeantUI:
+    build:
+      targets:
+        CodeSergeantUI: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+

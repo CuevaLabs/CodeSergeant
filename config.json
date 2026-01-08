@@ -1,0 +1,80 @@
+{
+  "poll_interval_sec": 0.5,
+  "judge_interval_sec": 10,
+  "cooldown_seconds": 30,
+  "reminder_intervals_sec": [
+    300,
+    600,
+    900
+  ],
+  "voice": {
+    "record_seconds": 5,
+    "sample_rate": 16000,
+    "note_record_seconds": 120
+  },
+  "openai": {
+    "api_key": null,
+    "model": "gpt-4o-mini"
+  },
+  "ollama": {
+    "model": "llama3.2",
+    "base_url": "http://localhost:11434"
+  },
+  "tts": {
+    "provider": "elevenlabs",
+    "rate": 185,
+    "volume": 1.0,
+    "elevenlabs_api_key": null,
+    "voice_id": "DGzg6RaUqxGRTHSBjfgF",
+    "model_id": "eleven_turbo_v2_5"
+  },
+  "personality": {
+    "name": "sergeant",
+    "wake_word_name": "sergeant",
+    "description": "A strict drill sergeant who keeps you focused with firm, no-nonsense commands. Uses military-style motivation.",
+    "tone": [
+      "strict",
+      "firm",
+      "commanding",
+      "no-nonsense"
+    ]
+  },
+  "voice_activation": {
+    "enabled": true,
+    "sensitivity": 0.5
+  },
+  "pomodoro": {
+    "work_duration_minutes": 25,
+    "short_break_minutes": 5,
+    "long_break_minutes": 15,
+    "auto_start_with_session": false,
+    "pomodoros_until_long_break": 4
+  },
+  "screen_monitoring": {
+    "enabled": true,
+    "app_blocklist": [
+      "1Password",
+      "Keychain Access",
+      "LastPass",
+      "Bitwarden",
+      "PayPal",
+      "Venmo",
+      "Cash App",
+      "Chase",
+      "Bank of America",
+      "Wells Fargo",
+      "Citibank",
+      "Capital One",
+      "US Bank",
+      "PNC",
+      "TD Bank"
+    ],
+    "blur_regions": [],
+    "use_local_vision": true,
+    "check_interval_seconds": 120
+  },
+  "motivation": {
+    "enabled": true,
+    "check_interval_minutes": 3
+  }
+}

@@ -1,0 +1,29 @@
+# Core dependencies
+rumps
+requests
+numpy
+python-dateutil
+python-dotenv
+
+# AI/LLM backends
+ollama
+openai>=1.0
+
+# Text-to-speech
+pyttsx3
+elevenlabs
+
+# Speech recognition
+faster-whisper
+sounddevice
+
+# Image processing (for blur regions)
+pillow>=10.0
+
+# Native macOS support (PyObjC)
+pyobjc-framework-Cocoa>=9.0
+pyobjc-framework-Quartz>=9.0
+
+# Python-Swift Bridge Server
+flask>=3.0
+flask-cors>=4.0

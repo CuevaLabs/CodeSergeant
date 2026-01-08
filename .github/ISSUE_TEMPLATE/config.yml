@@ -1,0 +1,9 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/YOUR_USERNAME/CodeSergeant#readme
+    about: Check out the README and documentation first
+  - name: Discussions
+    url: https://github.com/YOUR_USERNAME/CodeSergeant/discussions
+    about: Ask questions and share ideas in GitHub Discussions
+
