@@ -1,5 +1,5 @@
 # Core dependencies
-rumps
+rumps; sys_platform == "darwin"  # macOS menu bar library
 requests
 numpy
 python-dateutil
@@ -20,9 +20,9 @@ sounddevice
 # Image processing (for blur regions)
 pillow>=10.0
 
-# Native macOS support (PyObjC)
-pyobjc-framework-Cocoa>=9.0
-pyobjc-framework-Quartz>=9.0
+# Native macOS support (PyObjC) - macOS only
+pyobjc-framework-Cocoa>=9.0; sys_platform == "darwin"
+pyobjc-framework-Quartz>=9.0; sys_platform == "darwin"
 
 # Python-Swift Bridge Server
 flask>=3.0
