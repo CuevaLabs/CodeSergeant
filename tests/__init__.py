@@ -12,4 +12,3 @@ Run tests with:
     pytest -m "not slow"            # Skip slow tests
     pytest --cov=code_sergeant      # With coverage
 """
-

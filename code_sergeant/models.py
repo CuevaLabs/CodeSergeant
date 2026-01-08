@@ -1,12 +1,13 @@
 """Data models for Code Sergeant."""
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Literal, List
+from typing import List, Literal, Optional
 
 
 @dataclass
 class ActivityEvent:
     """Represents a single activity observation."""
+
     ts: datetime
     app: str
     title: str
@@ -23,6 +24,7 @@ class ActivityEvent:
 @dataclass
 class Judgment:
     """Represents a judgment about whether activity matches the goal."""
+
     classification: Literal["on_task", "off_task", "idle", "unknown", "thinking"]
     confidence: float
     reason: str
@@ -33,6 +35,7 @@ class Judgment:
 @dataclass
 class VoiceNote:
     """A voice note saved by the user."""
+
     timestamp: datetime
     content: str
     transcription: str
@@ -41,6 +44,7 @@ class VoiceNote:
 @dataclass
 class DistractionLog:
     """Log entry for user-reported distraction."""
+
     timestamp: datetime
     reason: str
     is_phone: bool = False
@@ -49,6 +53,7 @@ class DistractionLog:
 @dataclass
 class SessionStats:
     """Statistics for a focus session."""
+
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     focus_seconds: int = 0
@@ -69,11 +74,14 @@ class SessionStats:
 @dataclass
 class PersonalityProfile:
     """Personality profile for customizing Code Sergeant's behavior."""
+
     name: Literal["sergeant", "buddy", "advisor", "coach", "custom"]
     wake_word_name: str  # Name used in wake word (e.g., "sergeant", "buddy")
     description: str  # Freeform description for LLM interpretation
-    tone: List[str] = field(default_factory=list)  # e.g., ["strict", "firm"] or ["friendly", "supportive"]
-    
+    tone: List[str] = field(
+        default_factory=list
+    )  # e.g., ["strict", "firm"] or ["friendly", "supportive"]
+
     @classmethod
     def get_predefined(cls, name: str) -> "PersonalityProfile":
         """Get a predefined personality profile."""
@@ -81,26 +89,44 @@ class PersonalityProfile:
             "sergeant": cls(
                 name="sergeant",
                 wake_word_name="sergeant",
-                description="A strict drill sergeant who keeps you focused with firm, no-nonsense commands. Uses military-style motivation.",
-                tone=["strict", "firm", "commanding", "no-nonsense"]
+                description=(
+                    "A strict drill sergeant who keeps you focused with firm, "
+                    "no-nonsense commands. Uses military-style motivation."
+                ),
+                tone=["strict", "firm", "commanding", "no-nonsense"],
             ),
             "buddy": cls(
                 name="buddy",
                 wake_word_name="buddy",
-                description="A friendly, supportive friend who encourages you gently. Uses casual, warm language.",
-                tone=["friendly", "supportive", "casual", "warm", "encouraging"]
+                description=(
+                    "A friendly, supportive friend who encourages you gently. "
+                    "Uses casual, warm language."
+                ),
+                tone=["friendly", "supportive", "casual", "warm", "encouraging"],
             ),
             "advisor": cls(
                 name="advisor",
                 wake_word_name="advisor",
-                description="A professional, helpful advisor who provides thoughtful guidance. Uses clear, respectful language.",
-                tone=["professional", "helpful", "respectful", "thoughtful", "clear"]
+                description=(
+                    "A professional, helpful advisor who provides thoughtful guidance. "
+                    "Uses clear, respectful language."
+                ),
+                tone=["professional", "helpful", "respectful", "thoughtful", "clear"],
             ),
             "coach": cls(
                 name="coach",
                 wake_word_name="coach",
-                description="A motivational coach who inspires you to achieve your goals. Uses energetic, positive language.",
-                tone=["motivational", "energetic", "positive", "inspiring", "action-oriented"]
+                description=(
+                    "A motivational coach who inspires you to achieve your goals. "
+                    "Uses energetic, positive language."
+                ),
+                tone=[
+                    "motivational",
+                    "energetic",
+                    "positive",
+                    "inspiring",
+                    "action-oriented",
+                ],
             ),
         }
         return profiles.get(name, profiles["sergeant"])
@@ -109,6 +135,7 @@ class PersonalityProfile:
 @dataclass
 class PomodoroState:
     """State of the pomodoro timer."""
+
     current_state: Literal["stopped", "work", "short_break", "long_break"] = "stopped"
     time_remaining_seconds: int = 0
     work_duration_minutes: int = 25
@@ -117,13 +144,13 @@ class PomodoroState:
     pomodoros_completed: int = 0
     pomodoros_until_long_break: int = 4
     is_paused: bool = False
-    
+
     def get_display_time(self) -> str:
         """Get formatted time for display (MM:SS)."""
         minutes = self.time_remaining_seconds // 60
         seconds = self.time_remaining_seconds % 60
         return f"{minutes:02d}:{seconds:02d}"
-    
+
     def get_state_emoji(self) -> str:
         """Get emoji for current state."""
         if self.current_state == "work":

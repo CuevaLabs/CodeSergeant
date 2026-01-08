@@ -1,10 +1,11 @@
 """Personality system for Code Sergeant."""
 import logging
 import random
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 import ollama
 
-from .models import PersonalityProfile, Judgment
+from .models import Judgment, PersonalityProfile
 
 logger = logging.getLogger("code_sergeant.personality")
 
@@ -214,12 +215,16 @@ PERSONALITY_PHRASES = {
 
 class PersonalityManager:
     """Manages personality profiles and phrase generation."""
-    
-    def __init__(self, config: Dict[str, Any], ollama_model: str = "llama3.2",
-                 ollama_base_url: str = "http://localhost:11434"):
+
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        ollama_model: str = "llama3.2",
+        ollama_base_url: str = "http://localhost:11434",
+    ):
         """
         Initialize personality manager.
-        
+
         Args:
             config: Configuration dictionary
             ollama_model: Ollama model for custom phrase generation
@@ -230,38 +235,41 @@ class PersonalityManager:
         self.ollama_client = ollama.Client(host=ollama_base_url)
         self._current_profile: Optional[PersonalityProfile] = None
         self._load_profile()
-        logger.info(f"PersonalityManager initialized with profile: {self._current_profile.name}")
-    
+        logger.info(
+            f"PersonalityManager initialized with profile: {self._current_profile.name}"
+        )
+
     def _load_profile(self):
         """Load personality profile from config."""
         personality_config = self.config.get("personality", {})
         name = personality_config.get("name", "sergeant")
-        
+
         if name == "custom":
             self._current_profile = PersonalityProfile(
                 name="custom",
                 wake_word_name=personality_config.get("wake_word_name", "assistant"),
                 description=personality_config.get("description", ""),
-                tone=personality_config.get("tone", [])
+                tone=personality_config.get("tone", []),
             )
         else:
             self._current_profile = PersonalityProfile.get_predefined(name)
-    
+
     @property
     def profile(self) -> PersonalityProfile:
         """Get current personality profile."""
         return self._current_profile
-    
+
     @property
     def wake_word(self) -> str:
         """Get current wake word."""
         return f"hey {self._current_profile.wake_word_name}"
-    
-    def set_personality(self, name: str, custom_description: str = None,
-                       custom_wake_word: str = None):
+
+    def set_personality(
+        self, name: str, custom_description: str = None, custom_wake_word: str = None
+    ):
         """
         Set the current personality.
-        
+
         Args:
             name: Personality name
             custom_description: Description for custom personality
@@ -272,50 +280,54 @@ class PersonalityManager:
                 name="custom",
                 wake_word_name=custom_wake_word or "assistant",
                 description=custom_description or "",
-                tone=[]
+                tone=[],
             )
         else:
             self._current_profile = PersonalityProfile.get_predefined(name)
-        
+
         logger.info(f"Personality set to: {self._current_profile.name}")
-    
+
     def get_phrase(self, phrase_type: str, context: Dict[str, Any] = None) -> str:
         """
         Get a phrase for the current personality.
-        
+
         Args:
             phrase_type: Type of phrase (off_task_warning, off_task_yell, on_task, thinking, reminder, etc.)
             context: Additional context for phrase generation
-            
+
         Returns:
             Generated or selected phrase
         """
         profile_name = self._current_profile.name
-        
+
         # For predefined personalities, use templates
         if profile_name in PERSONALITY_PHRASES:
             phrases = PERSONALITY_PHRASES[profile_name].get(phrase_type, [])
             if phrases:
                 return random.choice(phrases)
-        
+
         # For custom personality or missing phrases, generate with LLM
         return self._generate_phrase(phrase_type, context)
-    
+
     def _generate_phrase(self, phrase_type: str, context: Dict[str, Any] = None) -> str:
         """
         Generate a phrase using LLM for custom personalities.
-        
+
         Args:
             phrase_type: Type of phrase to generate
             context: Additional context
-            
+
         Returns:
             Generated phrase
         """
         try:
-            tone_str = ", ".join(self._current_profile.tone) if self._current_profile.tone else "neutral"
+            tone_str = (
+                ", ".join(self._current_profile.tone)
+                if self._current_profile.tone
+                else "neutral"
+            )
             description = self._current_profile.description or "a helpful assistant"
-            
+
             phrase_instructions = {
                 "off_task_warning": "Generate a gentle warning for someone who got distracted.",
                 "off_task_yell": "Generate a firm reminder for someone who has been distracted for too long.",
@@ -325,9 +337,11 @@ class PersonalityManager:
                 "session_start": "Generate an encouraging message to start a focus session.",
                 "session_end": "Generate a summary message for completing a focus session.",
             }
-            
-            instruction = phrase_instructions.get(phrase_type, "Generate an appropriate response.")
-            
+
+            instruction = phrase_instructions.get(
+                phrase_type, "Generate an appropriate response."
+            )
+
             prompt = f"""You are {description}. Your tone is: {tone_str}.
 
 {instruction}
@@ -336,35 +350,39 @@ Keep your response SHORT (1-2 sentences max, under 20 words).
 Respond in character only - no explanations, just the phrase.
 
 Response:"""
-            
+
             response = self.ollama_client.generate(
                 model=self.ollama_model,
                 prompt=prompt,
-                options={"temperature": 0.8, "num_predict": 50}
+                options={"temperature": 0.8, "num_predict": 50},
             )
-            
+
             phrase = response.get("response", "").strip()
             # Clean up any quotes
-            phrase = phrase.strip('"\'')
-            
+            phrase = phrase.strip("\"'")
+
             if phrase:
                 return phrase
-            
+
         except Exception as e:
             logger.warning(f"Failed to generate phrase: {e}")
-        
+
         # Fallback to sergeant phrases
-        fallback_phrases = PERSONALITY_PHRASES.get("sergeant", {}).get(phrase_type, ["Keep going!"])
+        fallback_phrases = PERSONALITY_PHRASES.get("sergeant", {}).get(
+            phrase_type, ["Keep going!"]
+        )
         return random.choice(fallback_phrases) if fallback_phrases else "Keep going!"
-    
-    def get_judgment_phrase(self, judgment: Judgment, context: Dict[str, Any] = None) -> str:
+
+    def get_judgment_phrase(
+        self, judgment: Judgment, context: Dict[str, Any] = None
+    ) -> str:
         """
         Get an appropriate phrase based on judgment.
-        
+
         Args:
             judgment: Judgment object
             context: Additional context
-            
+
         Returns:
             Appropriate phrase for the judgment
         """
@@ -383,7 +401,7 @@ Response:"""
 def get_personality_choices() -> List[Dict[str, str]]:
     """
     Get list of available personality choices for UI.
-    
+
     Returns:
         List of personality options with name and description
     """
@@ -392,31 +410,30 @@ def get_personality_choices() -> List[Dict[str, str]]:
             "name": "sergeant",
             "display_name": "Drill Sergeant",
             "wake_word": "hey sergeant",
-            "description": "Strict, no-nonsense military-style motivation"
+            "description": "Strict, no-nonsense military-style motivation",
         },
         {
             "name": "buddy",
             "display_name": "Friendly Buddy",
             "wake_word": "hey buddy",
-            "description": "Warm, supportive friend who encourages gently"
+            "description": "Warm, supportive friend who encourages gently",
         },
         {
             "name": "advisor",
             "display_name": "Professional Advisor",
             "wake_word": "hey advisor",
-            "description": "Thoughtful, professional guidance"
+            "description": "Thoughtful, professional guidance",
         },
         {
             "name": "coach",
             "display_name": "Motivational Coach",
             "wake_word": "hey coach",
-            "description": "Energetic, inspiring motivation"
+            "description": "Energetic, inspiring motivation",
         },
         {
             "name": "custom",
             "display_name": "Custom",
             "wake_word": "hey [your name]",
-            "description": "Define your own personality and wake word"
+            "description": "Define your own personality and wake word",
         },
     ]
-

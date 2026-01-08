@@ -3,7 +3,7 @@
 This module provides phrases used by the judge and other components.
 For personality-aware phrase generation, use the PersonalityManager class.
 """
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 
 def get_off_task_warnings() -> List[str]:

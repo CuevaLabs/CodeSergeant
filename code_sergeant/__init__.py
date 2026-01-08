@@ -10,13 +10,13 @@ A self-contained productivity app with:
 
 __version__ = "1.0.0"
 
-from .menu_bar import CodeSergeantApp
-from .controller import AppController
-from .native_monitor import NativeMonitor
 from .ai_client import AIClient, create_ai_client
-from .motivation_monitor import MotivationMonitor
-from .screen_monitor import ScreenMonitor, create_screen_monitor
+from .controller import AppController
 from .dashboard import DashboardWindow, create_dashboard
+from .menu_bar import CodeSergeantApp
+from .motivation_monitor import MotivationMonitor
+from .native_monitor import NativeMonitor
+from .screen_monitor import ScreenMonitor, create_screen_monitor
 
 __all__ = [
     "CodeSergeantApp",
