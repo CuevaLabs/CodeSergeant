@@ -171,27 +171,13 @@ def end_session():
         return jsonify({"error": "Controller not initialized"}), 500
 
     try:
-        # Get stats before ending session
-        state = controller.get_state_snapshot()
-        stats = state.stats
+        # Check if ending early (with penalty)
+        data = request.json or {}
+        early = data.get("early", False)
 
-        # End the session
-        controller.end_session()
-        logger.info("Session ended")
-
-        # Build summary
-        summary = {}
-        if stats:
-            focus_minutes = stats.focus_seconds // 60 if stats.focus_seconds else 0
-            summary = {
-                "focus_minutes": focus_minutes,
-                "distractions": stats.distractions_count
-                if stats.distractions_count
-                else 0,
-                "pomodoros_completed": stats.pomodoros_completed
-                if stats.pomodoros_completed
-                else 0,
-            }
+        # End the session (returns summary with XP info)
+        summary = controller.end_session(early=early)
+        logger.info(f"Session ended (early={early}, penalty={summary.get('xp_penalty', 0)} XP)")
 
         return jsonify(
             {"success": True, "message": "Session ended", "summary": summary}
@@ -260,6 +246,7 @@ def get_timer():
                 "remaining_seconds": 0,
                 "total_seconds": 0,
                 "is_break": False,
+                "is_paused": False,
                 "work_minutes": 25,
                 "break_minutes": 5,
             }
@@ -284,10 +271,85 @@ def get_timer():
             "remaining_seconds": pomodoro_state.time_remaining_seconds,
             "total_seconds": total_seconds,
             "is_break": is_break,
+            "is_paused": pomodoro_state.is_paused,  # Add pause state
             "work_minutes": pomodoro_state.work_duration_minutes,
             "break_minutes": pomodoro_state.short_break_minutes,
         }
     )
+
+
+# ============================================================================
+# XP & Rank System
+# ============================================================================
+
+
+@app.route("/api/xp/status", methods=["GET"])
+def get_xp_status():
+    """Get current XP and rank status."""
+    if not controller or not hasattr(controller, "xp_manager"):
+        return jsonify({"error": "XP manager not initialized"}), 500
+
+    try:
+        xp_state = controller.get_xp_state()
+        return jsonify(xp_state)
+    except Exception as e:
+        logger.error(f"Failed to get XP status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/xp/reset", methods=["POST"])
+def reset_xp():
+    """Reset all XP and rank (for testing/admin)."""
+    if not controller or not hasattr(controller, "xp_manager"):
+        return jsonify({"error": "XP manager not initialized"}), 500
+
+    try:
+        controller.xp_manager.reset_all_xp()
+        return jsonify({"success": True, "message": "XP reset to 0"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/xp/ranks", methods=["GET"])
+def get_ranks():
+    """Get list of all ranks."""
+    if not controller or not hasattr(controller, "xp_manager"):
+        return jsonify({"error": "XP manager not initialized"}), 500
+
+    try:
+        ranks = controller.xp_manager.get_rank_list()
+        return jsonify({"ranks": ranks})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
+# Judgment & Warning System
+# ============================================================================
+
+
+@app.route("/api/judgment/current", methods=["GET"])
+def get_current_judgment():
+    """Get current activity judgment for warning system."""
+    if not controller:
+        return jsonify({"error": "Controller not initialized"}), 500
+
+    try:
+        judgment = controller.get_current_judgment()
+        if judgment:
+            return jsonify(judgment)
+        else:
+            # Return default idle state if no judgment
+            return jsonify({
+                "classification": "idle",
+                "confidence": 1.0,
+                "reason": "No active session",
+                "action": "none",
+                "say": ""
+            })
+    except Exception as e:
+        logger.error(f"Failed to get judgment: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================================
