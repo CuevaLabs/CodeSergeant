@@ -2,10 +2,11 @@
 //  DashboardView.swift
 //  CodeSergeantUI
 //
-//  Main dashboard with liquid glass design for focus sessions
+//  Main dashboard with liquid glass design, XP system, and warning strobe
 //
 
 import SwiftUI
+import AppKit
 
 struct DashboardView: View {
     @EnvironmentObject var appState: AppState
@@ -53,6 +54,7 @@ struct DashboardView: View {
             .padding(30)
         }
         .frame(width: 520, height: 680)
+        .warningStrobe(status: appState.warningStatus)  // Apply strobe border
         .onAppear {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
                 animateIn = true
@@ -70,15 +72,16 @@ struct DashboardView: View {
                     .font(.system(size: 28))
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [.blue, .purple],
+                            colors: militaryGradient,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Code Sergeant")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                    Text("CODE SERGEANT")
+                        .font(.system(size: 22, weight: .black, design: .monospaced))
+                        .tracking(1)
                         .foregroundStyle(.primary)
                     
                     Text(appState.isSessionActive ? "Session Active" : "Ready to Focus")
@@ -89,9 +92,13 @@ struct DashboardView: View {
             
             Spacer()
             
-            // Settings button
+            // Settings button - FIXED
             LiquidIconButton("gear", size: 40) {
-                showingSettings = true
+                if #available(macOS 14.0, *) {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                } else {
+                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+                }
             }
         }
         .padding(.bottom, 10)
@@ -104,9 +111,10 @@ struct DashboardView: View {
             // Goal input card
             HoverGlassCard(cornerRadius: 24) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Label("Focus Goal", systemImage: "target")
-                        .font(.system(size: 14, weight: .semibold))
+                    Label("MISSION", systemImage: "target")
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .tracking(1)
                     
                     TextField("What do you want to accomplish?", text: $goalText)
                         .textFieldStyle(.plain)
@@ -128,9 +136,10 @@ struct DashboardView: View {
             // Timer settings card
             HoverGlassCard(cornerRadius: 24) {
                 VStack(spacing: 20) {
-                    Label("Session Settings", systemImage: "timer")
-                        .font(.system(size: 14, weight: .semibold))
+                    Label("SESSION SETTINGS", systemImage: "timer")
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .tracking(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     
                     TimerSlider(
@@ -173,19 +182,39 @@ struct DashboardView: View {
     
     private var activeSessionView: some View {
         VStack(spacing: 24) {
-            // Timer display
-            TimerDisplay(
-                remainingSeconds: appState.remainingSeconds,
-                totalSeconds: Int(appState.workMinutes) * 60,
-                isBreak: appState.isBreak
-            )
+            // Timer with XP display below
+            VStack(spacing: 16) {
+                TimerDisplay(
+                    remainingSeconds: appState.remainingSeconds,
+                    totalSeconds: Int(appState.workMinutes) * 60,
+                    isBreak: appState.isBreak
+                )
+                
+                // XP earned this session with animation - DOPAMINE REWARD!
+                HStack(spacing: 12) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.yellow)
+                    
+                    Text("+\(appState.sessionXP) XP")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.yellow)
+                        .contentTransition(.numericText())
+                        .animation(.spring(response: 0.3), value: appState.sessionXP)
+                    
+                    Text("this session")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
             
             // Current goal
             HoverGlassCard(cornerRadius: 20) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Current Goal", systemImage: "target")
-                        .font(.system(size: 12, weight: .semibold))
+                    Label("MISSION", systemImage: "target")
+                        .font(.system(size: 12, weight: .black, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .tracking(1)
                     
                     Text(appState.sessionGoal.isEmpty ? "No goal set" : appState.sessionGoal)
                         .font(.system(size: 16, weight: .medium))
@@ -196,7 +225,7 @@ struct DashboardView: View {
                 .padding(16)
             }
             
-            // Session stats
+            // Stats row - REPLACED "Focus Status" with Rank Display
             HStack(spacing: 16) {
                 StatCard(
                     label: "Focus Time",
@@ -206,25 +235,32 @@ struct DashboardView: View {
                     color: .blue
                 )
                 
+                // Rank display instead of redundant focus status
                 StatCard(
-                    label: "Status",
-                    value: appState.isBreak ? "Break" : "Focus",
+                    label: "Rank",
+                    value: String(appState.currentRank.prefix(3)).uppercased(),
                     unit: "",
-                    icon: appState.isBreak ? "cup.and.saucer.fill" : "brain.head.profile",
-                    color: appState.isBreak ? .green : .purple
+                    icon: "star.fill",
+                    color: rankColor
                 )
             }
             
-            // Control buttons
+            // Control buttons - FIXED pause/resume toggle
             HStack(spacing: 12) {
-                LiquidIconButton("pause.fill", size: 44) {
-                    appState.pauseSession()
+                // Pause/Resume button with proper state tracking - FIXED
+                LiquidIconButton(
+                    appState.isPaused ? "play.fill" : "pause.fill",
+                    size: 44
+                ) {
+                    if appState.isPaused {
+                        appState.resumeSession()
+                    } else {
+                        appState.pauseSession()
+                    }
                 }
                 
                 LiquidButton("End Session", icon: "stop.fill", style: .danger) {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                        appState.endSession()
-                    }
+                    showEndSessionConfirmation()
                 }
                 
                 if appState.isBreak {
@@ -244,10 +280,10 @@ struct DashboardView: View {
             // AI status indicator
             HStack(spacing: 6) {
                 Circle()
-                    .fill(appState.openAIAvailable ? Color.green : Color.orange)
+                    .fill(appState.openAIAvailable || appState.ollamaAvailable ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
                 
-                Text(appState.primaryBackend == "openai" ? "OpenAI" : "Ollama")
+                Text(appState.primaryBackend == "openai" ? "OpenAI" : (appState.ollamaAvailable ? "Ollama" : "No AI"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
             }
@@ -274,6 +310,72 @@ struct DashboardView: View {
             }
         }
         .padding(.top, 10)
+    }
+    
+    // MARK: - Helpers
+    
+    private var militaryGradient: [Color] {
+        [Color(red: 0.3, green: 0.5, blue: 0.2), Color(red: 0.2, green: 0.3, blue: 0.5)]  // Olive green + navy blue
+    }
+    
+    private var rankColor: Color {
+        switch appState.currentRank.lowercased() {
+        case "recruit":
+            return .gray
+        case "private":
+            return Color(red: 0.3, green: 0.5, blue: 0.8)  // Navy blue
+        case "corporal":
+            return Color(red: 0.3, green: 0.6, blue: 0.3)  // Olive green
+        case "sergeant":
+            return Color(red: 0.6, green: 0.3, blue: 0.8)  // Purple
+        case "staff sergeant":
+            return Color(red: 0.8, green: 0.6, blue: 0.2)  // Gold
+        case "captain":
+            return Color(red: 0.9, green: 0.4, blue: 0.2)  // Orange
+        default:
+            return .white
+        }
+    }
+    
+    private func showEndSessionConfirmation() {
+        let penalty = Int(Double(appState.sessionXP) * 0.5)  // 50% penalty
+        
+        let alert = NSAlert()
+        alert.messageText = "End Session Early?"
+        alert.informativeText = "You'll lose \(penalty) XP (50% penalty).\n\nContinue?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "End Session")
+        alert.addButton(withTitle: "Keep Going")
+        
+        let response = alert.runModal()
+        
+        if response == .alertFirstButtonReturn {
+            endSessionEarly()
+        }
+    }
+    
+    private func endSessionEarly() {
+        guard let url = URL(string: "http://127.0.0.1:5050/api/session/end") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Pass early=true to apply XP penalty
+        let body: [String: Any] = ["early": true]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        URLSession.shared.dataTask(with: request) { [weak appState] data, response, error in
+            if error == nil {
+                DispatchQueue.main.async {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                        appState?.isSessionActive = false
+                        appState?.sessionGoal = ""
+                        appState?.focusTimeMinutes = 0
+                    }
+                }
+            }
+        }.resume()
     }
 }
 
@@ -306,8 +408,9 @@ struct StatCard: View {
                 }
                 
                 Text(label)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .tracking(0.5)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
@@ -321,4 +424,3 @@ struct StatCard: View {
     DashboardView()
         .environmentObject(AppState())
 }
-

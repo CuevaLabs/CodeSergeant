@@ -29,6 +29,7 @@ from .storage import (
 )
 from .tts import TTSService
 from .voice import VoiceWorker, WakeWordDetector, run_voice_worker
+from .xp_manager import XPManager
 
 logger = logging.getLogger("code_sergeant.controller")
 
@@ -165,6 +166,9 @@ class AppController:
             tts_service=self.tts_service,
         )
 
+        # Initialize XP manager
+        self.xp_manager = XPManager(self.config)
+
         logger.info("AppController initialized")
 
     def _init_wake_word_detector(self):
@@ -259,6 +263,9 @@ class AppController:
         # Reset judge patterns
         self.judge.reset_patterns()
 
+        # Reset session XP counter
+        self.xp_manager.reset_session()
+
         # Clear event queue
         while not self.event_queue.empty():
             try:
@@ -294,13 +301,21 @@ class AppController:
 
         logger.info("Session started")
 
-    def end_session(self) -> None:
-        """End the current session and stop all workers."""
+    def end_session(self, early: bool = False) -> Dict[str, Any]:
+        """
+        End the current session and stop all workers.
+        
+        Args:
+            early: If True, apply early end XP penalty
+            
+        Returns:
+            Dict with session summary including XP info
+        """
         if not self.state.session_active:
             logger.warning("No active session to end")
-            return
+            return {}
 
-        logger.info("Ending session")
+        logger.info(f"Ending session (early={early})")
 
         # Signal workers to stop
         self.stop_event.set()
@@ -340,6 +355,13 @@ class AppController:
                 self.pomodoro.state.pomodoros_completed
             )
 
+        # Handle XP (apply penalty if ending early)
+        xp_penalty = 0
+        session_xp = self.xp_manager.state.session_xp
+        if early and session_xp > 0:
+            xp_penalty = self.xp_manager.deduct_xp_for_early_end()
+            logger.info(f"Applied early end penalty: -{xp_penalty} XP")
+
         # Write session log
         try:
             log_file = write_session_log(
@@ -368,6 +390,16 @@ class AppController:
         self.stop_event.clear()
 
         logger.info("Session ended")
+
+        # Return session summary
+        return {
+            "focus_minutes": int(self.state.stats.focus_seconds / 60) if self.state.stats else 0,
+            "distractions": self.state.stats.distractions_count if self.state.stats else 0,
+            "session_xp": session_xp,
+            "xp_penalty": xp_penalty,
+            "total_xp": self.xp_manager.state.total_xp,
+            "current_rank": self.xp_manager.state.current_rank,
+        }
 
     def _start_drill_worker(self) -> None:
         """
@@ -956,6 +988,9 @@ class AppController:
             judge_interval = self.config["judge_interval_sec"]
             last_judged_activity_id = None
             current_judgment = None
+            
+            # XP tracking - award XP every minute of on_task time
+            xp_accumulator = 0.0  # Track seconds of on_task time
 
             while not self.stop_event.is_set():
                 try:
@@ -1007,6 +1042,14 @@ class AppController:
                                     self.state.stats.best_focus_streak_seconds = (
                                         self.state.stats.current_focus_streak_seconds
                                     )
+                                
+                                # Accumulate XP for on_task time
+                                xp_accumulator += judge_interval
+                                # Award XP every 60 seconds (1 minute)
+                                if xp_accumulator >= 60:
+                                    minutes = int(xp_accumulator // 60)
+                                    self.xp_manager.award_xp(minutes)
+                                    xp_accumulator = xp_accumulator % 60
                             elif current_judgment.classification == "thinking":
                                 self.state.stats.thinking_seconds += judge_interval
                                 # Thinking counts towards focus streak
@@ -1088,3 +1131,29 @@ class AppController:
     def get_personality_choices(self):
         """Get available personality choices."""
         return get_personality_choices()
+
+    def get_xp_state(self) -> Dict[str, Any]:
+        """
+        Get current XP state for API.
+        
+        Returns:
+            Dict with XP and rank information
+        """
+        return self.xp_manager.get_state_dict()
+
+    def get_current_judgment(self) -> Optional[Dict[str, Any]]:
+        """
+        Get current judgment state for warning system.
+        
+        Returns:
+            Dict with judgment info, or None if no judgment
+        """
+        if self.last_judgment:
+            return {
+                "classification": self.last_judgment.classification,
+                "confidence": self.last_judgment.confidence,
+                "reason": self.last_judgment.reason,
+                "action": self.last_judgment.action,
+                "say": self.last_judgment.say,
+            }
+        return None

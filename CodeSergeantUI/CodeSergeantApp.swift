@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import Foundation
 
 @main
 struct CodeSergeantApp: App {
@@ -45,9 +46,16 @@ struct CodeSergeantApp: App {
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private var bridgeProcess: Process?
+    private var bridgeProcessPID: Int32?
+    private let bridgePort = 5050
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon (menu bar only app)
         NSApp.setActivationPolicy(.accessory)
+        
+        // Set up signal handlers for cleanup
+        setupSignalHandlers()
         
         // Start the Python bridge server in background
         startBridgeServer()
@@ -61,7 +69,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startBridgeServer() {
         // Bridge server is started as a separate process
         // This allows the SwiftUI app to communicate with Python backend
-        DispatchQueue.global(qos: .background).async {
+        DispatchQueue.global(qos: .background).async { [weak self] in
+            guard let self = self else { return }
             let task = Process()
             let fileManager = FileManager.default
             
@@ -143,7 +152,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             
             do {
                 try task.run()
+                
+                // Store process reference for cleanup
+                self.bridgeProcess = task
+                self.bridgeProcessPID = task.processIdentifier
+                
                 print("✅ Bridge server starting at \(root.path)")
+                print("   Process ID: \(task.processIdentifier)")
             } catch {
                 print("❌ Failed to start bridge server: \(error)")
                 print("   Project root: \(root.path)")
@@ -157,15 +172,178 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func stopBridgeServer() {
-        // Send shutdown signal to bridge server
-        guard let url = URL(string: "http://127.0.0.1:5050/api/shutdown") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        URLSession.shared.dataTask(with: request).resume()
+        print("🛑 Stopping bridge server...")
+        
+        // Strategy 1: Try HTTP shutdown (with timeout)
+        let shutdownSemaphore = DispatchSemaphore(value: 0)
+        var httpShutdownSuccess = false
+        
+        if let url = URL(string: "http://127.0.0.1:\(bridgePort)/api/shutdown") {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 2.0 // 2 second timeout
+            
+            URLSession.shared.dataTask(with: request) { _, response, error in
+                httpShutdownSuccess = (error == nil && (response as? HTTPURLResponse)?.statusCode == 200)
+                shutdownSemaphore.signal()
+            }.resume()
+            
+            // Wait up to 2 seconds for HTTP shutdown
+            _ = shutdownSemaphore.wait(timeout: .now() + 2.0)
+        }
+        
+        if httpShutdownSuccess {
+            print("✅ Bridge server shutdown via HTTP")
+            // Give it a moment to exit gracefully
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        
+        // Strategy 2: Terminate Process directly
+        if let process = bridgeProcess, process.isRunning {
+            print("🔄 Terminating bridge process (PID: \(process.processIdentifier))...")
+            process.terminate()
+            
+            // Wait up to 2 seconds for graceful termination
+            let terminationTimeout = Date().addingTimeInterval(2.0)
+            while process.isRunning && Date() < terminationTimeout {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            
+            if process.isRunning {
+                print("⚠️ Process still running, force killing...")
+                // Use kill command since Process doesn't have kill() method
+                let killTask = Process()
+                killTask.executableURL = URL(fileURLWithPath: "/bin/kill")
+                killTask.arguments = ["-9", "\(process.processIdentifier)"]
+                do {
+                    try killTask.run()
+                    killTask.waitUntilExit()
+                    Thread.sleep(forTimeInterval: 0.2)
+                } catch {
+                    print("⚠️ Failed to force kill process: \(error)")
+                }
+            } else {
+                print("✅ Bridge process terminated")
+            }
+        }
+        
+        // Strategy 3: Kill by PID if we have it but process reference is lost
+        if let pid = bridgeProcessPID {
+            let killTask = Process()
+            killTask.executableURL = URL(fileURLWithPath: "/bin/kill")
+            killTask.arguments = ["-9", "\(pid)"]
+            do {
+                try killTask.run()
+                killTask.waitUntilExit()
+                print("✅ Killed process by PID: \(pid)")
+            } catch {
+                // Process may already be dead, ignore error
+            }
+        }
+        
+        // Strategy 4: Fallback - kill any Python processes on the bridge port
+        killPythonOnPort(bridgePort)
+        
+        // Clear references
+        bridgeProcess = nil
+        bridgeProcessPID = nil
+        
+        print("✅ Bridge server cleanup complete")
+    }
+    
+    private func setupSignalHandlers() {
+        // Handle SIGTERM (normal termination)
+        signal(SIGTERM) { _ in
+            DispatchQueue.main.async {
+                if let delegate = NSApplication.shared.delegate as? AppDelegate {
+                    delegate.stopBridgeServer()
+                }
+                exit(0)
+            }
+        }
+        
+        // Handle SIGINT (Ctrl+C)
+        signal(SIGINT) { _ in
+            DispatchQueue.main.async {
+                if let delegate = NSApplication.shared.delegate as? AppDelegate {
+                    delegate.stopBridgeServer()
+                }
+                exit(0)
+            }
+        }
+    }
+    
+    private func killPythonOnPort(_ port: Int) {
+        print("🔍 Checking for Python processes on port \(port)...")
+        
+        // Use lsof to find processes using the port
+        let lsofTask = Process()
+        lsofTask.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        lsofTask.arguments = ["-ti", ":\(port)"]
+        
+        let pipe = Pipe()
+        lsofTask.standardOutput = pipe
+        lsofTask.standardError = Pipe()
+        
+        do {
+            try lsofTask.run()
+            lsofTask.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !output.isEmpty else {
+                print("   No processes found on port \(port)")
+                return
+            }
+            
+            let pids = output.components(separatedBy: "\n").compactMap { Int32($0) }
+            
+            for pid in pids {
+                // Verify it's a Python process
+                let psTask = Process()
+                psTask.executableURL = URL(fileURLWithPath: "/bin/ps")
+                psTask.arguments = ["-p", "\(pid)", "-o", "comm="]
+                
+                let psPipe = Pipe()
+                psTask.standardOutput = psPipe
+                psTask.standardError = Pipe()
+                
+                do {
+                    try psTask.run()
+                    psTask.waitUntilExit()
+                    
+                    let psData = psPipe.fileHandleForReading.readDataToEndOfFile()
+                    if let comm = String(data: psData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       comm.lowercased().contains("python") {
+                        print("   Killing Python process (PID: \(pid)) on port \(port)...")
+                        
+                        let killTask = Process()
+                        killTask.executableURL = URL(fileURLWithPath: "/bin/kill")
+                        killTask.arguments = ["-9", "\(pid)"]
+                        try killTask.run()
+                        killTask.waitUntilExit()
+                        
+                        print("   ✅ Killed PID \(pid)")
+                    }
+                } catch {
+                    // Ignore errors checking process
+                }
+            }
+        } catch {
+            // lsof may not be available or port may be free
+            print("   Could not check port \(port): \(error.localizedDescription)")
+        }
     }
 }
 
 // MARK: - App State
+
+// Warning status enum
+enum WarningStatus: String {
+    case green = "on_task"      // On task
+    case yellow = "thinking"    // Thinking/idle
+    case red = "off_task"       // Off task - trigger strobe
+}
 
 class AppState: ObservableObject {
     @Published var isSessionActive: Bool = false
@@ -173,8 +351,21 @@ class AppState: ObservableObject {
     @Published var focusTimeMinutes: Int = 0
     @Published var remainingSeconds: Int = 0
     @Published var isBreak: Bool = false
+    @Published var isPaused: Bool = false  // NEW: Track pause state
     @Published var workMinutes: Double = 25
     @Published var breakMinutes: Double = 5
+    
+    // XP & Rank System (NEW)
+    @Published var totalXP: Int = 0
+    @Published var sessionXP: Int = 0
+    @Published var currentRank: String = "Recruit"
+    @Published var rankProgress: Double = 0.0  // 0.0 to 1.0
+    @Published var nextRankName: String = "Private"
+    @Published var xpToNextRank: Int = 100
+    
+    // Warning System (NEW)
+    @Published var warningStatus: WarningStatus = .green
+    @Published var lastJudgmentText: String = ""
     
     // AI Status
     @Published var openAIAvailable: Bool = false
@@ -290,12 +481,16 @@ class AppState: ObservableObject {
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.fetchStatus()
             self?.fetchTimerStatus()
+            self?.fetchXPStatus()          // NEW: Poll XP status
+            self?.fetchJudgmentStatus()    // NEW: Poll judgment for warning system
         }
         
         // Initial fetch
         fetchStatus()
         fetchAIStatus()
         fetchScreenMonitoringStatus()
+        fetchXPStatus()          // NEW
+        fetchJudgmentStatus()    // NEW
     }
     
     private func fetchStatus() {
@@ -325,6 +520,40 @@ class AppState: ObservableObject {
             DispatchQueue.main.async {
                 self?.remainingSeconds = json["remaining_seconds"] as? Int ?? 0
                 self?.isBreak = json["is_break"] as? Bool ?? false
+                self?.isPaused = json["is_paused"] as? Bool ?? false  // NEW: Track pause state
+            }
+        }.resume()
+    }
+    
+    private func fetchXPStatus() {
+        guard let url = URL(string: "\(bridgeURL)/api/xp/status") else { return }
+        
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            
+            DispatchQueue.main.async {
+                self?.totalXP = json["total_xp"] as? Int ?? 0
+                self?.sessionXP = json["session_xp"] as? Int ?? 0
+                self?.currentRank = json["current_rank"] as? String ?? "Recruit"
+                self?.rankProgress = json["rank_progress"] as? Double ?? 0.0
+                self?.nextRankName = json["next_rank_name"] as? String ?? ""
+                self?.xpToNextRank = json["xp_to_next_rank"] as? Int ?? 0
+            }
+        }.resume()
+    }
+    
+    private func fetchJudgmentStatus() {
+        guard let url = URL(string: "\(bridgeURL)/api/judgment/current") else { return }
+        
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            
+            DispatchQueue.main.async {
+                let classification = json["classification"] as? String ?? "idle"
+                self?.warningStatus = WarningStatus(rawValue: classification) ?? .green
+                self?.lastJudgmentText = json["reason"] as? String ?? ""
             }
         }.resume()
     }

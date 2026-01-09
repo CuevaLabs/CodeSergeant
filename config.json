@@ -7,6 +7,43 @@
     600,
     900
   ],
+  "xp": {
+    "enabled": true,
+    "xp_per_minute": 1,
+    "early_end_penalty_percent": 50,
+    "ranks": [
+      {
+        "name": "Recruit",
+        "xp_threshold": 0,
+        "icon": "🎖️"
+      },
+      {
+        "name": "Private",
+        "xp_threshold": 100,
+        "icon": "⭐"
+      },
+      {
+        "name": "Corporal",
+        "xp_threshold": 300,
+        "icon": "⭐⭐"
+      },
+      {
+        "name": "Sergeant",
+        "xp_threshold": 600,
+        "icon": "⭐⭐⭐"
+      },
+      {
+        "name": "Staff Sergeant",
+        "xp_threshold": 1000,
+        "icon": "🎖️⭐"
+      },
+      {
+        "name": "Captain",
+        "xp_threshold": 1500,
+        "icon": "🎖️⭐⭐"
+      }
+    ]
+  },
   "voice": {
     "record_seconds": 5,
     "sample_rate": 16000,
