@@ -248,8 +248,8 @@ pytest  # Verify setup
 
 Building something with Code Sergeant? Have ADHD productivity tips to share? Found a bug?
 
-- **Discord**: [Join the community](#) *(coming soon)*
-- **Twitter/X**: Follow [@carloscueva](#) for updates
+
+- **Twitter/X**: Follow [@cuevalabsdev](https://x.com/cuevalabsdev) for updates
 - **GitHub Issues**: Bug reports and feature requests welcome
 
 This started as a personal tool to solve my own focus problems. If it helps you too, I'd love to hear about it.
